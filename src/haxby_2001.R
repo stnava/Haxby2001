@@ -8,10 +8,10 @@ fmriPredictorMatrix <- function( fmri, mask , motionin , selector = NA , ncompco
   motion <-as.matrix(msvd$v[, 1:nsvdcomp])
   cmpc<-as.matrix( compcor( mat, ncompcor = ncompcor ) )
   globsig<-apply( mat , FUN=mean , MARGIN=1 )
-  if ( length(c(cmpc)) == nrow(mat) ) mat<-residuals( lm( mat ~ as.matrix(motion) + c(cmpc)  ) ) else mat<-residuals( lm( mat ~ as.matrix(motion) + cmpc + globsig ) )
+  if ( length(c(cmpc)) == nrow(mat) ) mat<-residuals( lm( mat ~ as.matrix(motion)   ) ) else mat<-residuals( lm( mat ~ as.matrix(motion)  ) )
   mydot<-F
   if ( mydot ) mat<-temporalwhiten( mat )
-  return( mat )
+  return( list( mat = mat, cmpc=cmpc, globsig=globsig )  )
 }
 ########################################################
 majoritylabel <- function( groundtruth, myprediction )
@@ -39,7 +39,7 @@ majoritylabel <- function( groundtruth, myprediction )
   return(myvotedlabels)
   }
 if ( ! exists("myrates") ) myrates<-rep(NA,12)
-for ( wrun in 1:1 )
+for ( wrun in 5:5 )
 {
 ########################################################
 # this assumes that we know the "block" stimuli   ######
@@ -58,8 +58,8 @@ if ( ! exists("fmri")  | doit )
     fmriavg<-antsImageRead("AFFINE_avg.nii.gz",3)
     print(dim(fmri))
     mask<-antsImageRead('mask.nii.gz',3)
-    dofeaturesel<-TRUE 
-    if ( dofeaturesel ) mask<-getMask(fmriavg,250,1.e9,TRUE)
+    dofeaturesel<-TRUE
+    maskFull<-getMask(fmriavg,250,1.e9,TRUE)
     design<-read.table('labels.txt',header=T)
     selector<-( as.numeric( design$chunks ) %% 2 == 0  )
     selector2<-( as.numeric( design$chunks ) %% 2 == 1  )
@@ -67,9 +67,10 @@ if ( ! exists("fmri")  | doit )
     selector2<-( as.numeric( design$chunks ) == wrun  )
     subdesign<-subset( design, selector )
     motionin<-read.csv('AFFINEMOCOparams.csv')
-    ncc <- 3
-    if ( dofeaturesel )  ncc <- 8 
-    mat<-fmriPredictorMatrix( fmri, mask, motionin, selector, ncompcor = ncc )
+    ncc <- 4
+    fmripreds<-fmriPredictorMatrix( fmri, mask, motionin, selector, ncompcor = ncc )
+    fmripredsFull<-fmriPredictorMatrix( fmri, maskFull, motionin, selector, ncompcor = ncc )
+    mat<-residuals( lm( fmripreds$mat ~ fmripredsFull$cmpc ) )
   }
 myclasses <- levels( subdesign$labels )
 nclasses<-length(myclasses )
@@ -77,20 +78,20 @@ myblocks<-matrix( rep(0,(nrow(mat))*nclasses ), nrow=( nrow(mat)  ))
 for ( i in 1:nclasses ) myblocks[,i]<-as.numeric(  subdesign$labels == myclasses[i] )
 mysblocks<-myblocks
 for ( i in 1:ncol(mysblocks) ) mysblocks[,i]<-predict(smooth.spline(mysblocks[,i],df=100))$y
-myblocks<-cbind( myblocks, mysblocks )
+mydesign<-cbind( myblocks, mysblocks )
 nv<-100
 if ( FALSE ) {
   wmat<-whiten(mat)
-  ff<-sparseDecom2( inmatrix=list(wmat,as.matrix(myblocks)), inmask=list(mask,NA), perms=0, its=12, mycoption=1, sparseness=c( 0.02 , 0.1 ) , nvecs=nv, smooth=1, robust=0, cthresh=c(0,0), ell1 = 0.1 , z=-1 ) ;  mysccanimages<-imageListToMatrix( imageList=ff$eig1, mask=mask) 
+  ff<-sparseDecom2( inmatrix=list(wmat,as.matrix(mydesign)), inmask=list(mask,NA), perms=0, its=12, mycoption=1, sparseness=c( 0.02 , 0.1 ) , nvecs=nv, smooth=1, robust=0, cthresh=c(0,0), ell1 = 0.1 , z=-1 ) ;  mysccanimages<-imageListToMatrix( imageList=ff$eig1, mask=mask) 
   } else {
     if  ( dofeaturesel ) {
     # quick cca based data selection 
       print("begin feature selection")
       fsvecs<-9
-      ff<-sparseDecom2( inmatrix=list(mat,as.matrix(myblocks)), inmask=list(mask,NA), perms=0, its=11, mycoption=1, sparseness=c( -0.002 , 1/fsvecs ) , nvecs=fsvecs, smooth=1, robust=0, cthresh=c(0,0), ell1 = 0.01 , z=-1 )
-      sccamask<-antsImageClone( ff$eig1[[1]] )
+      gg<-sparseDecom2( inmatrix=list(mat,as.matrix(mysblocks)), inmask=list(mask,NA), perms=0, its=11, mycoption=1, sparseness=c( -0.002 , 1/fsvecs ) , nvecs=fsvecs, smooth=1, robust=0, cthresh=c(0,0), ell1 = 0.01 , z=-1 )
+      sccamask<-antsImageClone( gg$eig1[[1]] )
       sccamask[ mask > 0 ]<-0
-      for ( img in ff$eig1 ) {
+      for ( img in gg$eig1 ) {
         ImageMath(img@dimension,img,'abs',img)
         ImageMath(img@dimension,sccamask,'+',sccamask,img)
       }
@@ -107,11 +108,12 @@ if ( FALSE ) {
 mysccanpreds <- ( mat  ) %*% t( mysccanimages )
 mydf         <- data.frame( factpreds = as.factor((subdesign$labels))  , imgs = mysccanpreds )
 my.rf        <- svm( factpreds ~ . , data=mydf, probability = TRUE  )
-if ( ! exists("mat2") | doit ) 
-  {
-    ##### test phase ######
-    mat2<-fmriPredictorMatrix( fmri, mask, motionin, selector2 )
-  }
+#######################
+##### test phase ######
+#######################
+fmriTest     <- fmriPredictorMatrix( fmri, mask,     motionin, selector2, ncompcor = ncc )
+fmriTestFull <- fmriPredictorMatrix( fmri, maskFull, motionin, selector2, ncompcor = ncc )
+mat2<-residuals( lm( fmriTest$mat ~ fmriTestFull$cmpc ) )
 mysccanpreds2 <- ( mat2  ) %*% t( mysccanimages )
 mydf2<-data.frame(  imgs = mysccanpreds2 ) # , corrs = cor( t( mysccanpreds2 ) ) )
 mypred2<-predict( my.rf , newdata = mydf2 )
