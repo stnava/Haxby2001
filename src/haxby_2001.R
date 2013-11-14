@@ -1,4 +1,7 @@
+#!/usr/bin/env Rscript
+
 ########################################################
+
 fmriPredictorMatrix <- function( fmri, mask , motionin , selector = NA , ncompcor= 3 , nsvdcomp = 4 )
 {
   mat<-timeseries2matrix( fmri, mask )
@@ -39,7 +42,10 @@ majoritylabel <- function( groundtruth, myprediction )
   return(myvotedlabels)
   }
 if ( ! exists("myrates") ) myrates<-rep(NA,12)
-for ( wrun in 0:11 )
+unique(design$chunks)
+design<-read.table('labels.txt',header=T)
+runstotest<-unique(design$chunks)
+for ( wrun in runstotest )
 {
 ########################################################
 # this assumes that we know the "block" stimuli   ######
@@ -52,6 +58,11 @@ library(ANTsR)
 library(pheatmap)
 library(e1071)
 doit<-T
+if ( ! file.exists("AFFINE.nii.gz") )
+  {
+  print("FAILURE --- you need to be within a subject's directory")
+  q()
+  }
 if ( ! exists("fmri")  | doit )
   {
     fmri<-antsImageRead("AFFINE.nii.gz",4)
@@ -60,7 +71,6 @@ if ( ! exists("fmri")  | doit )
     mask<-antsImageRead('mask.nii.gz',3)
     dofeaturesel<-FALSE
     maskFull<-getMask(fmriavg,250,1.e9,TRUE)
-    design<-read.table('labels.txt',header=T)
     selector<-( as.numeric( design$chunks ) %% 2 == 0  )
     selector2<-( as.numeric( design$chunks ) %% 2 == 1  )
     selector<-( as.numeric( design$chunks ) != wrun   )
@@ -84,7 +94,7 @@ for ( i in 1:nclasses ) myblocks[,i]<-as.numeric(  subdesign$labels == myclasses
 mysblocks<-myblocks
 for ( i in 1:ncol(mysblocks) ) mysblocks[,i]<-predict(smooth.spline(mysblocks[,i],df=100))$y
 mydesign<-cbind( myblocks, mysblocks )
-nv<-55
+nv<-85
 if ( FALSE ) {
   wmat<-whiten(mat)
  # ff<-sparseDecom2( inmatrix=list(wmat,as.matrix(mydesign)), inmask=list(mask,NA), perms=0, its=12, mycoption=1, sparseness=c( 0.02 , 0.1 ) , nvecs=nv, smooth=0, robust=0, cthresh=c(0,0), ell1 = 0.1 , z=-1 ) ;  mysccanimages<-imageListToMatrix( imageList=ff$eig1, mask=mask) 
