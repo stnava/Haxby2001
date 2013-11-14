@@ -39,7 +39,7 @@ majoritylabel <- function( groundtruth, myprediction )
   return(myvotedlabels)
   }
 if ( ! exists("myrates") ) myrates<-rep(NA,12)
-for ( wrun in 5:5 )
+for ( wrun in 0:11 )
 {
 ########################################################
 # this assumes that we know the "block" stimuli   ######
@@ -58,7 +58,7 @@ if ( ! exists("fmri")  | doit )
     fmriavg<-antsImageRead("AFFINE_avg.nii.gz",3)
     print(dim(fmri))
     mask<-antsImageRead('mask.nii.gz',3)
-    dofeaturesel<-TRUE
+    dofeaturesel<-FALSE
     maskFull<-getMask(fmriavg,250,1.e9,TRUE)
     design<-read.table('labels.txt',header=T)
     selector<-( as.numeric( design$chunks ) %% 2 == 0  )
@@ -70,7 +70,12 @@ if ( ! exists("fmri")  | doit )
     ncc <- 4
     fmripreds<-fmriPredictorMatrix( fmri, mask, motionin, selector, ncompcor = ncc )
     fmripredsFull<-fmriPredictorMatrix( fmri, maskFull, motionin, selector, ncompcor = ncc )
-    mat<-residuals( lm( fmripreds$mat ~ fmripredsFull$cmpc ) )
+    if ( ! dofeaturesel ) {
+      mat<-residuals( lm( fmripreds$mat ~ fmripredsFull$cmpc ) )
+    } else {
+      mat<-residuals( lm( fmripredsFull$mat ~ fmripredsFull$cmpc ) )
+      mask<-maskFull 
+    }
   }
 myclasses <- levels( subdesign$labels )
 nclasses<-length(myclasses )
@@ -79,16 +84,16 @@ for ( i in 1:nclasses ) myblocks[,i]<-as.numeric(  subdesign$labels == myclasses
 mysblocks<-myblocks
 for ( i in 1:ncol(mysblocks) ) mysblocks[,i]<-predict(smooth.spline(mysblocks[,i],df=100))$y
 mydesign<-cbind( myblocks, mysblocks )
-nv<-100
+nv<-55
 if ( FALSE ) {
   wmat<-whiten(mat)
-  ff<-sparseDecom2( inmatrix=list(wmat,as.matrix(mydesign)), inmask=list(mask,NA), perms=0, its=12, mycoption=1, sparseness=c( 0.02 , 0.1 ) , nvecs=nv, smooth=1, robust=0, cthresh=c(0,0), ell1 = 0.1 , z=-1 ) ;  mysccanimages<-imageListToMatrix( imageList=ff$eig1, mask=mask) 
+ # ff<-sparseDecom2( inmatrix=list(wmat,as.matrix(mydesign)), inmask=list(mask,NA), perms=0, its=12, mycoption=1, sparseness=c( 0.02 , 0.1 ) , nvecs=nv, smooth=0, robust=0, cthresh=c(0,0), ell1 = 0.1 , z=-1 ) ;  mysccanimages<-imageListToMatrix( imageList=ff$eig1, mask=mask) 
   } else {
     if  ( dofeaturesel ) {
     # quick cca based data selection 
       print("begin feature selection")
       fsvecs<-9
-      gg<-sparseDecom2( inmatrix=list(mat,as.matrix(mysblocks)), inmask=list(mask,NA), perms=0, its=11, mycoption=1, sparseness=c( -0.002 , 1/fsvecs ) , nvecs=fsvecs, smooth=1, robust=0, cthresh=c(0,0), ell1 = 0.01 , z=-1 )
+      gg<-sparseDecom2( inmatrix=list(mat,as.matrix(mysblocks)), inmask=list(mask,NA), perms=0, its=11, mycoption=1, sparseness=c( -0.002 , 1/fsvecs ) , nvecs=fsvecs, smooth=0, robust=0, cthresh=c(3,0), ell1 = 0.01 , z=-1 )
       sccamask<-antsImageClone( gg$eig1[[1]] )
       sccamask[ mask > 0 ]<-0
       for ( img in gg$eig1 ) {
@@ -99,7 +104,7 @@ if ( FALSE ) {
       sccamask[ sccamask < 1     ]<-0
       antsImageWrite(sccamask,'sccamask.nii.gz')
       mask<-sccamask
-      mat<-fmriPredictorMatrix( fmri, mask, motionin, selector )
+      mat<-fmriPredictorMatrix( fmri, mask, motionin, selector )$mat
     }
     ff<-svd( mat )
     mysccanimages<-t(ff$v[,1:nv])
@@ -131,5 +136,6 @@ print(paste("CorrectClassify:",myrate,"%"))
 myrates[ wrun+1 ]<-myrate
 } # wrun loop
 #######################
-
+ratedf<-data.frame( RunNumber=c(0:11), CrossValidatedPredictionForRun=myrates )
+write.csv(ratedf,'mypredictionresults.csv',row.names=F)
 
