@@ -20,7 +20,7 @@ subj6<-data.frame( RateCorrect=allresults[6, ], id='6' )
 subjs <- rbind(subj1, subj2, subj3, subj4, subj5, subj6 )
 #now make your lovely plot
 pdf('haxby_summary_results.pdf')
-myplot <- ggplot(subjs, aes(RateCorrect, fill = id)) + geom_density(alpha = 0.2) + labs(title="Haxby 2001 Predictions - 6 Subjects, Majority Vote")
+myplot <- ggplot(subjs, aes(RateCorrect, fill = id)) + geom_density(alpha = 0.2) + labs(title="Haxby 2001 Predictions - 6 Subjects, Majority Vote, 9 categories")
 plot( myplot )
 dev.off()
 mydf<-data.frame(allresults)
