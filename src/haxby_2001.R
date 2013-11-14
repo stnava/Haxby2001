@@ -59,14 +59,13 @@ fmriavg<-antsImageRead("AFFINE_avg.nii.gz",3)
 print(dim(fmri))
 mask<-antsImageRead('mask.nii.gz',3)
 dofeaturesel<-TRUE
-maskFull<-getMask(fmriavg,1100,1.e9,TRUE)
-if ( file.exists("AALlabel.nii.gz") & FALSE )
+maskFull<-antsImageRead("fullMask.nii.gz")
+if ( file.exists("AALlabel.nii.gz") & TRUE )
   {
     aalimg<-antsImageRead("AALlabel.nii.gz",3)
     aalvoxselection <- aalimg <= 90 & aalimg > 0 & maskFull > 0
     maskFull[ !aalvoxselection ]<-0
   }
-
 
 for ( wrun in runstotest )
 {

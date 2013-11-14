@@ -14,12 +14,15 @@ for x in mask*nii.gz ; do
   ImageMath 3 mask.nii.gz + mask.nii.gz $x 
 done
 ThresholdImage 3 mask.nii.gz mask.nii.gz 1 1.e9 
-ThresholdImage 3 ${nm}_avg.nii.gz fullMask.nii.gz 1000 1.e9 
+ThresholdImage 3 ${nm}_avg.nii.gz fullMask.nii.gz Otsu 3 
+ThresholdImage 3 fullMask.nii.gz fullMask.nii.gz 2 3  
 ImageMath 3 fullMask.nii.gz GetLargestComponent fullMask.nii.gz
+ImageMath 3 fullMask.nii.gz MD fullMask.nii.gz 1
+ImageMath 3 fullMask.nii.gz ME fullMask.nii.gz 1
 MultiplyImages 3 fullMask.nii.gz ${nm}_avg.nii.gz brain.nii.gz 
 if [[ ! -s AALlabel.nii.gz  ]] ; then 
   ${mybasedir}/../Haxby2001/src/antsRegistrationAAL.sh -d 3 -f brain.nii.gz -m ${mybasedir}/../Haxby2001/template/template.nii.gz  -o AAL -t d  -l ${mybasedir}/../Haxby2001/template/aal.nii.gz 
 fi
-${mybasedir}/../Haxby2001/src/haxby_2001.R 
+# ${mybasedir}/../Haxby2001/src/haxby_2001.R 
 echo your processing of $PWD is done 
 
