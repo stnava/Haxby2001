@@ -333,10 +333,10 @@ AFFINESTAGE="--transform Affine[0.1] \
              --smoothing-sigmas 3x2x1x0"
 
 SYNSTAGE="--transform SyN[0.15,3,0] \
-          --metric cc[$FIXEDIMAGE,$MOVINGIMAGE,1,2] \
+          --metric cc[$FIXEDIMAGE,$MOVINGIMAGE,1,3] \
           --convergence 30x70x50x10 \
           --shrink-factors 6x4x2x1 \
-          --smoothing-sigmas 3x2x1x0"
+          --smoothing-sigmas 6x6x3x0mm"
 
 STAGES=$RIGIDSTAGE
 if [[ $TRANSFORMTYPE == 'a' ]];
