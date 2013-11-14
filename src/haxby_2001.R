@@ -42,9 +42,10 @@ majoritylabel <- function( groundtruth, myprediction )
   return(myvotedlabels)
   }
 if ( ! exists("myrates") ) myrates<-rep(NA,12)
-unique(design$chunks)
 design<-read.table('labels.txt',header=T)
+unique(design$chunks)
 runstotest<-unique(design$chunks)
+runstotest<-runstotest[ runstotest < 12 ] 
 for ( wrun in runstotest )
 {
 ########################################################
