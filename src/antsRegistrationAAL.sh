@@ -318,25 +318,25 @@ reportMappingParameters
 # Construct mapping stages
 #
 ##############################
-
-RIGIDSTAGE="--initial-moving-transform [$FIXEDIMAGE,$MOVINGIMAGE,1] \
+ResampleImageBySpacing 3 $MOVINGIMAGE ${OUTPUTNAME}Warped.nii.gz 3 3 3 
+RIGIDSTAGE="--initial-moving-transform [$MOVINGIMAGE,$FIXEDIMAGE,1] \
             --transform Rigid[0.1] \
-            --metric MI[$FIXEDIMAGE,$MOVINGIMAGE,1,32,Regular,0.25] \
+            --metric MI[$MOVINGIMAGE,$FIXEDIMAGE,1,32,Regular,0.1] \
             --convergence 1000x500x50x0 \
             --shrink-factors 8x4x2x1 \
             --smoothing-sigmas 3x2x1x0"
 
 AFFINESTAGE="--transform Affine[0.1] \
-             --metric MI[$FIXEDIMAGE,$MOVINGIMAGE,1,32,Regular,0.25] \
-             --convergence 1000x500x250x3 \
+             --metric MI[$MOVINGIMAGE,$FIXEDIMAGE,1,32,Regular,0.1] \
+             --convergence 1000x500x125x0 \
              --shrink-factors 8x4x2x1 \
              --smoothing-sigmas 3x2x1x0"
 
 SYNSTAGE="--transform SyN[0.15,3,0] \
-          --metric cc[$FIXEDIMAGE,$MOVINGIMAGE,1,3] \
-          --convergence 30x70x50x10 \
-          --shrink-factors 6x4x2x1 \
-          --smoothing-sigmas 6x6x3x0mm"
+          --metric cc[$MOVINGIMAGE,$FIXEDIMAGE,1,2] \
+          --convergence 30x20x10x0 \
+          --shrink-factors 8x4x2x1 \
+          --smoothing-sigmas 7x6x3x0mm"
 
 STAGES=$RIGIDSTAGE
 if [[ $TRANSFORMTYPE == 'a' ]];
@@ -356,7 +356,7 @@ ${ANTSPATH}/antsRegistration --dimensionality $DIM \
 
 if [[ -s $labelimage ]] ; then 
   ${ANTSPATH}/antsApplyTransforms --dimensionality $DIM -o ${OUTPUTNAME}label.nii.gz \
-      -t ${OUTPUTNAME}1Warp.nii.gz -t ${OUTPUTNAME}0GenericAffine.mat -r $FIXEDIMAGE \
+      -t [${OUTPUTNAME}0GenericAffine.mat,1] -t ${OUTPUTNAME}1InverseWarp.nii.gz -r $FIXEDIMAGE \
       -i $labelimage -n NearestNeighbor
 fi
 
