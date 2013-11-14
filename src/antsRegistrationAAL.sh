@@ -332,9 +332,9 @@ AFFINESTAGE="--transform Affine[0.1] \
              --shrink-factors 8x4x2x1 \
              --smoothing-sigmas 3x2x1x0"
 
-SYNSTAGE="--transform BSplineSyN[0.1,${SPLINEDISTANCE},0,3] \
-          --metric Mattes[$FIXEDIMAGE,$MOVINGIMAGE,1,32] \
-          --convergence 70x0x0 \
+SYNSTAGE="--transform SyN[0.1,3,0] \
+          --metric cc[$FIXEDIMAGE,$MOVINGIMAGE,1,2] \
+          --convergence 70x50x10 \
           --shrink-factors 4x2x1 \
           --smoothing-sigmas 2x1x0"
 
@@ -368,8 +368,3 @@ fi
 
 ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=$ORIGINALNUMBEROFTHREADS
 export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS
-
-
-
-
-

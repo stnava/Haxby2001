@@ -18,7 +18,7 @@ ThresholdImage 3 ${nm}_avg.nii.gz fullMask.nii.gz 1000 1.e9
 ImageMath 3 fullMask.nii.gz GetLargestComponent fullMask.nii.gz
 MultiplyImages 3 fullMask.nii.gz ${nm}_avg.nii.gz brain.nii.gz 
 if [[ ! -s AALlabel.nii.gz  ]] ; then 
-  ${mybasedir}/../Haxby2001/src/antsRegistrationNick.sh -d 3 -f brain.nii.gz -m ${mybasedir}/../Haxby2001/template/template.nii.gz  -o AAL -t d  -l ${mybasedir}/../Haxby2001/template/aal.nii.gz 
+  ${mybasedir}/../Haxby2001/src/antsRegistrationAAL.sh -d 3 -f brain.nii.gz -m ${mybasedir}/../Haxby2001/template/template.nii.gz  -o AAL -t d  -l ${mybasedir}/../Haxby2001/template/aal.nii.gz 
 fi
 ${mybasedir}/../Haxby2001/src/haxby_2001.R 
 echo your processing of $PWD is done 
