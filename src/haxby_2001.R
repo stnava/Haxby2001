@@ -59,14 +59,14 @@ fmriavg<-antsImageRead("AFFINE_avg.nii.gz",3)
 print(dim(fmri))
 mask<-antsImageRead('mask.nii.gz',3)
 dofeaturesel<-TRUE
-maskFull<-antsImageRead("fullMask.nii.gz")
+maskFull<-getMask(fmriavg,250,1.e9,TRUE)
 if ( file.exists("AALlabel.nii.gz") & TRUE )
   {
     aalimg<-antsImageRead("AALlabel.nii.gz",3)
-    aalvoxselection <- aalimg <= 90 & aalimg > 0 & maskFull > 0
-    maskFull[ !aalvoxselection ]<-0
+    aalimg<-maskImage( aalimg,aalimg, as.list( c(43:56,81:90,91,92,99,100) ) , binarize=TRUE )
+    aalvoxselection <- aalimg <= 100 & aalimg > 0 & mask > 0
+    mask[ !aalvoxselection ]<-0
   }
-
 for ( wrun in runstotest )
 {
 ########################################################
@@ -80,13 +80,13 @@ for ( wrun in runstotest )
   selector2<-( as.numeric( design$chunks ) == wrun  )
   subdesign<-subset( design, selector )
   motionin<-read.csv('AFFINEMOCOparams.csv')
-  ncc <- 3
+  ncc <- 2
   fmripreds<-fmriPredictorMatrix( fmri, mask, motionin, selector, ncompcor = ncc )
   fmripredsFull<-fmriPredictorMatrix( fmri, maskFull, motionin, selector, ncompcor = ncc )
   if ( ! dofeaturesel ) {
-      mat<-residuals( lm( fmripreds$mat ~ fmripredsFull$cmpc ) )
+      mat<-residuals( lm( fmripreds$mat ~ fmripredsFull$cmpc  + fmripredsFull$globsig  ) )
     } else {
-      mat<-residuals( lm( fmripredsFull$mat ~ fmripredsFull$cmpc ) )
+      mat<-residuals( lm( fmripredsFull$mat ~ fmripredsFull$cmpc + fmripredsFull$globsig ) )
       mask<-maskFull 
     }
   myclasses <- levels( subdesign$labels )
@@ -96,37 +96,48 @@ for ( wrun in runstotest )
   mysblocks<-myblocks
   for ( i in 1:ncol(mysblocks) ) mysblocks[,i]<-predict(smooth.spline(mysblocks[,i],df=100))$y
   mydesign<-cbind( myblocks, mysblocks )
-  if ( FALSE ) {
+  if ( TRUE ) {
     wmat<-whiten(mat)
-    # ff<-sparseDecom2( inmatrix=list(wmat,as.matrix(mydesign)), inmask=list(mask,NA), perms=0, its=12, mycoption=1, sparseness=c( 0.02 , 0.1 ) , nvecs=nv, smooth=0, robust=0, cthresh=c(0,0), ell1 = 0.1 , z=-1 ) ;  mysccanimages<-imageListToMatrix( imageList=ff$eig1, mask=mask) 
+    ff<-sparseDecom2( inmatrix=list(wmat,as.matrix(mydesign)), inmask=list(mask,NA), perms=0, its=12, mycoption=1, sparseness=c( 0.02 , 0.1 ) , nvecs=nv, smooth=0, robust=0, cthresh=c(0,0), ell1 = 0.1 , z=-1 )
+    mysccanimages<-imageListToMatrix( imageList=ff$eig1, mask=mask) 
   } else {
     if  ( dofeaturesel ) {
     # quick cca based data selection 
       print("begin feature selection")
-      fsvecs<-ncol(mydesign)
-      gg<-sparseDecom2( inmatrix=list(mat,as.matrix(mydesign)), inmask=list(maskFull,NA), perms=0, its=11, mycoption=1, sparseness=c( -0.002 , 1/fsvecs ) , nvecs=fsvecs, smooth=0, robust=0, cthresh=c(5,0), ell1 = 0.01 , z=-1 )
-      sccamask<-antsImageClone( gg$eig1[[1]] )
-      sccamask[ mask > 0 ]<-0
-      for ( img in gg$eig1 ) {
-        ImageMath(img@dimension,img,'abs',img)
-        ImageMath(img@dimension,sccamask,'+',sccamask,img)
-      }
-      sccamask[ sccamask > 1.e-6 ]<-1 
-      sccamask[ sccamask < 1     ]<-0
-      antsImageWrite(sccamask,'sccamask.nii.gz')
-      mask<-sccamask
-      mat<-fmriPredictorMatrix( fmri, mask, motionin, selector )$mat
+      if ( ! file.exists("sccamask.nii.gz")  )
+        {
+          fsvecs<-ncol(mydesign)
+          gg<-sparseDecom2( inmatrix=list(mat,as.matrix(mydesign)), inmask=list(maskFull,NA), perms=0, its=3, mycoption=1, sparseness=c( -0.01 , 1/fsvecs ) , nvecs=fsvecs, smooth=0, robust=0, cthresh=c(10,0), ell1 = 0.01 , z=-1 )
+          sccamask<-antsImageClone( gg$eig1[[1]] )
+          sccamask[ mask > 0 ]<-0
+          for ( img in gg$eig1 ) {
+            ImageMath(img@dimension,img,'abs',img)
+            ImageMath(img@dimension,sccamask,'+',sccamask,img)
+          }
+          sccamask[ sccamask > 1.e-6 ]<-1 
+          sccamask[ sccamask < 1     ]<-0
+          antsImageWrite(sccamask,'sccamask.nii.gz')
+        }
+      mask<-antsImageRead("sccamask.nii.gz",3)
+      fmriTrainFull<-fmriPredictorMatrix( fmri, maskFull, motionin, selector )
+      fmriTrain<-fmriPredictorMatrix( fmri, mask, motionin, selector )
+      nuis<-as.matrix( residuals( lm( fmriTrainFull$cmpc ~ as.factor( subdesign$labels ) ) ) )
+      mat<-residuals( lm( fmriTrain$mat ~ nuis ) )  #
+      wmat<-whiten( mat )
+      ff<-sparseDecom2( inmatrix=list( wmat,as.matrix(mydesign)), inmask=list(mask,NA), perms=0, its=3, mycoption=1, sparseness=c( 0.001 , 0.1 ) , nvecs=50, smooth=0, robust=0, cthresh=c(0,0), ell1 = 0.1 , z=-1 )
+      mysccanimages<-imageListToMatrix( imageList=ff$eig1, mask=mask) 
     }
-    ff<-svd( mat )
-    print( paste( "100:",sum(ff$d[1:100]/sum(ff$d)),"200:",sum(ff$d[1:200]/sum(ff$d))) )
+#    ff<-svd( mat )
+#    print( paste( "100:",sum(ff$d[1:100]/sum(ff$d)),"200:",sum(ff$d[1:200]/sum(ff$d))) )
   }
-  fmriTest     <- fmriPredictorMatrix( fmri, mask,     motionin, selector2, ncompcor = ncc )
   fmriTestFull <- fmriPredictorMatrix( fmri, maskFull, motionin, selector2, ncompcor = ncc )
-  mat2<-residuals( lm( fmriTest$mat ~ fmriTestFull$cmpc[,2:ncc]  ) )  # mat2<-fmriTest$mat  
+  fmriTest     <- fmriPredictorMatrix( fmri, mask,     motionin, selector2, ncompcor = ncc )
+  mat2<-residuals( lm( fmriTest$mat ~ fmriTestFull$cmpc ) )  #
+#  mat2<-fmriTest$mat
   for ( nv in seq( from=80,to=80,by=10) )
     {
 ##### train phase #####
-    mysccanimages<-t(ff$v[,1:nv])
+#    mysccanimages<-t(ff$v[,1:nv])
     mysccanpreds <- ( mat  ) %*% t( mysccanimages )
     mydf         <- data.frame( factpreds = as.factor((subdesign$labels))  , imgs = mysccanpreds )
     my.rf        <- svm( factpreds ~ . , data=mydf, probability = TRUE  )
@@ -138,8 +149,8 @@ for ( wrun in runstotest )
     sublabels<-as.factor((subdesign2$labels))
     zz<-majoritylabel( sublabels , mypred2 )
     myrate<-100*(sum(zz$groundtruth==zz$voted)/length(zz$groundtruth))
-    print(paste("CorrectClassify:",myrate,"% with",nv,"predictors : run",wrun))
-  }
+    print(paste("CorrectClassify:",myrate,"% with",nv,"predictors : run",wrun," ... residualize nuis v train-predictors?"))
+    }
 myrates[ wrun+1 ]<-myrate
 } # wrun loop
 #######################

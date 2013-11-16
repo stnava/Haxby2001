@@ -318,7 +318,6 @@ reportMappingParameters
 # Construct mapping stages
 #
 ##############################
-ResampleImageBySpacing 3 $MOVINGIMAGE ${OUTPUTNAME}Warped.nii.gz 3 3 3 
 RIGIDSTAGE="--initial-moving-transform [$MOVINGIMAGE,$FIXEDIMAGE,1] \
             --transform Rigid[0.1] \
             --metric MI[$MOVINGIMAGE,$FIXEDIMAGE,1,32,Regular,0.1] \

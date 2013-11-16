@@ -86,8 +86,7 @@ if ( file.exists("AALlabel.nii.gz") & FALSE  )
     mask[ !aalvoxselection ]<-0
   }
 ############ other masking strategies end ###########
-# for ( wrun in runstotest )
-for ( wrun in 11 )
+for ( wrun in runstotest )
 {
   mask<-antsImageRead('mask.nii.gz',3)
   selector<-( as.numeric( design$chunks ) != wrun   )
