@@ -72,48 +72,52 @@ ThresholdImage(3,maskNuis,maskNuis,1,1)
 mask<-antsImageRead( 'mask.nii.gz', 3 )
 if ( file.exists("AALlabel.nii.gz") & TRUE  )
   {
-    aalimg<-antsImageRead("AALlabel.nii.gz",3)
-    aalnums<-c( 55, 56, 89:92 )
-    print( aal$label_name[aalnums] )
-#   aalnums<-sort( unique( aalimg[ mask > 0 & aalimg > 0 ] ) )
-    aalimg<-maskImage( aalimg,aalimg, as.list( aalnums ) , binarize=TRUE )
-    aalvoxselection <- ( aalimg <= 100 & aalimg > 0  )
-    mask<-antsImageClone( aalimg )
-    mask[ !aalvoxselection ]<-0
+  aalimg<-antsImageRead("AALlabel.nii.gz",3)
+  aalnums<-c( 55, 56, 89:92 )
+  aalnums<-c( 1:92 )
+  print( aal$label_name[aalnums] )
+  aalimg<-maskImage( aalimg,aalimg, as.list( aalnums ) , binarize=TRUE )
+  aalvoxselection <- ( aalimg <= 100 & aalimg > 0  )
+  mask<-antsImageClone( aalimg )
+  mask[ !aalvoxselection ]<-0
+  library(irlba)
+  ncc <- 4
+  segmat<-timeseries2matrix( fmri, maskNuis )
+  segsvd<-irlba( segmat[,sample(1:ncol(segmat))[1:(ncol(segmat)/4)]] , nu=ncc )
+  fmripreds<-fmriPredictorMatrix( fmri, mask, motionin, selector=NA, ncompcor = ncc )
+  fullmat<-residuals( lm( fmripreds$mat ~ segsvd$u ) )
+# now cca
+  myclasses <- levels( design$labels )
+  nclasses<-length(myclasses )
+  myblocks<-matrix( rep(0,(nrow(design))*nclasses ), nrow=( nrow(design)  ))
+  for ( i in 1:nclasses ) myblocks[,i]<-as.numeric(  design$labels == myclasses[i] )
+  for ( i in 1:ncol(myblocks) ) myblocks<-cbind(myblocks, predict(smooth.spline(myblocks[,i],df=100))$y )
+  nv<-10
+  mselection<-( design$chunks != 6   )
+  mycca<-sparseDecom2( inmatrix=list(fullmat[mselection,],as.matrix(myblocks[mselection,])), inmask=list(mask,NA), perms=0, its=15, mycoption=1, sparseness=c( -0.0005 , 1/nv ) , nvecs=nv, smooth=1, robust=0, cthresh=c(0,0), ell1 = 0.1 , z=-1 )
+  sccanmask<-eigSeg(mask,mycca$eig1)
+  sccanmask[ sccanmask > 0 & sccanmask < 5 ]<-1
+# now svd on cca output  
+  fmripreds<-fmriPredictorMatrix( fmri, sccanmask, motionin, selector=NA, ncompcor = ncc )
+  fullmat<-residuals( lm( fmripreds$mat ~ segsvd$u ) )
+  ff<-svd( fullmat )
   }
-############ other masking strategies end ###########
-library(irlba)
-ncc <- 4
-segmat<-timeseries2matrix( fmri, maskNuis )
-segsvd<-irlba( segmat[,sample(1:ncol(segmat))[1:(ncol(segmat)/4)]] , nu=ncc )
-fmripreds<-fmriPredictorMatrix( fmri, mask, motionin, selector=NA, ncompcor = ncc )
-fullmat<-residuals( lm( fmripreds$mat ~ segsvd$u ) )
-ff<-svd( fullmat )
+nv<-400
 for ( wrun in runstotest )
-{
+  {
   selector<-( as.numeric( design$chunks ) != wrun   )
   selector2<-( as.numeric( design$chunks ) == wrun  )
   subdesign<-subset( design, selector )
-  myclasses <- levels( subdesign$labels )
-  nclasses<-length(myclasses )
-  myblocks<-matrix( rep(0,(nrow(subdesign))*nclasses ), nrow=( nrow(subdesign)  ))
-  for ( i in 1:nclasses ) myblocks[,i]<-as.numeric(  subdesign$labels == myclasses[i] )
-  for ( i in 1:ncol(myblocks) ) myblocks<-cbind(myblocks, predict(smooth.spline(myblocks[,i],df=100))$y )
-  nv<-10
-#  myccamat<-whiten( fullmat[ selector, ] )
-  mycca<-sparseDecom2( inmatrix=list(myccamat,as.matrix(myblocks)), inmask=list(mask,NA), perms=0, its=3, mycoption=1, sparseness=c( -0.01 , 1/nv ) , nvecs=nv, smooth=1, robust=0, cthresh=c(0,0), ell1 = 0.1 , z=-1 )
-  sccanmask<-eigSeg(mask,mycca$eig1)
-##### train phase ######    mysccanimages<- (ff$u[selector,1:nv])
+##### train phase ######
+  mysccanimages<- (ff$u[selector,1:nv])
   whichtostudy<-( subdesign$labels != "rest" )
-  mysccanimages<-fullmat[ selector, ] %*% t( imageListToMatrix( imageList=mycca$eig1, mask=mask)  )
-  mydf         <- data.frame( factpreds = as.factor((subdesign$labels))  , imgs = scale(mysccanimages) )
+  mydf         <- data.frame( factpreds = as.factor((subdesign$labels))  , imgs = mysccanimages )
   mydf <- subset( mydf , whichtostudy )
-  my.rf        <- svm( factpreds ~ . , data=mydf ) 
+  my.rf        <- svm( factpreds ~ . , data=mydf ) # , cross = 0 )
 ##### test phase ######
-  mysccanimages<-fullmat[ selector2, ] %*% t( imageListToMatrix( imageList=mycca$eig1, mask=mask)  )
   subdesign2<-subset( design, selector2 )
   whichtostudy2<-( subdesign2$labels != "rest" )
-  mydf2<-data.frame(  imgs = scale(mysccanimages) )
+  mydf2<-data.frame(  imgs = ff$u[selector2,1:nv] ) 
   mydf2 <- subset( mydf2 , whichtostudy2 )
   mypred2<-predict( my.rf , newdata = mydf2 )
   sublabels<-as.factor((subdesign2$labels))
@@ -123,8 +127,8 @@ for ( wrun in runstotest )
   if ( wrun == 0 ) predictedlabels<-zz else predictedlabels<-rbind( predictedlabels, zz )
   myrates[ wrun+1 ]<-myrate
 } # wrun loop
+print( paste( "%var used:",sum(ff$d[1:nv])/sum(ff$d) * 100 ) )
 ############################################################################################
-print( mean(myrates) )
 ratedf<-data.frame( RunNumber=c(0:11), CrossValidatedPredictionForRun=myrates )
 write.csv(ratedf,'mypredictionresults.csv',row.names=F)
 write.csv(predictedlabels,'mypredictedLabels.csv',row.names=F)
