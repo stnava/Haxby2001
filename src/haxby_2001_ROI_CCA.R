@@ -99,8 +99,8 @@ if ( file.exists("AALlabel.nii.gz") & TRUE  )
   nv<-20
   whichtotest <- 2
   mselection<-( design$chunks != whichtotest   )
-  sparseness <- (-1) * sum( haxbymask > 0 ) / sum( mask > 0 ) * 2.0 / nv
-  mycca<-sparseDecom2( inmatrix=list(fullmat[mselection,],as.matrix(myblocks[mselection,])), inmask=list(mask,NA), perms=0, its=9, mycoption=1, sparseness=c( sparseness , 1/nv ) , nvecs=nv, smooth=1, robust=0, cthresh=c(5,0), ell1 = 0.1 , z=-1 )
+  sparseness <- (-1) * sum( haxbymask > 0 ) / sum( mask > 0 ) * 1.5 / nv
+  mycca<-sparseDecom2( inmatrix=list(fullmat[mselection,],as.matrix(myblocks[mselection,])), inmask=list(mask,NA), perms=0, its=19, mycoption=1, sparseness=c( sparseness , 1/nv ) , nvecs=nv, smooth=1, robust=0, cthresh=c(5,0), ell1 = 0.1 , z=-1 )
   sccanmask<-eigSeg(mask,mycca$eig1)
   antsImageWrite(sccanmask,"../temp.nii.gz")
   sccanmask[ sccanmask > 0 & sccanmask < 19 ]<-1
